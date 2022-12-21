@@ -4,9 +4,7 @@ use ink_lang as ink;
 // PackedLayout
 #[ink::contract]
 mod flipper {
-    use ink_storage::traits::{
-         PackedLayout, SpreadAllocate, SpreadLayout, 
-    };
+    use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
     use ink_storage::Mapping;
     // Ref: https://github.com/paritytech/ink/blob/master/examples/mother/Cargo.toml
     use ink_prelude::vec::Vec;
@@ -16,12 +14,16 @@ mod flipper {
     #[derive(Default, SpreadAllocate)]
     #[ink(storage)]
     pub struct Chocolate {
+        project_index: u32,
+        review_index: u32,
         /// Stores a project from id in storage
         projects: Mapping<u32, Project>,
         // Multivalued keys would allow wider scope for reviews
         reviews: Mapping<u32, Review>,
-        /// Hash of review_id + project_id to the review_project
-        reviews_projects: Mapping<Hash, ReviewProject>,
+        /// Index in reviews_projects_list arr. -> struct
+        reviews_projects: Mapping<u32, ReviewProject>,
+        /// Accountid + projectId
+        reviews_projects_list: Vec<(AccountId, u32)>,
     }
 
     #[derive(
@@ -120,20 +122,8 @@ mod flipper {
         /// to `false` and vice versa.
         #[ink(message)]
         pub fn flip(&mut self) -> Result<()> {
-            let s = Project {
-                review_count: 100,
-                rating_sum: 5,
-                owner: Default::default(),
-                name: "CHOC".bytes().collect(),
-                meta: Default::default(),
-            };
-            match self.projects.get(&0) {
-                Some(_) => Err(Error::ProjectAlreadyExists),
-                _ => {
-                    self.projects.insert(&0, &s);
-                    Ok(())
-                }
-            }
+            
+            self.add_project("CHOC".bytes().collect(), Default::default())
         }
 
         /// Simply returns the current value of our `bool`.
@@ -151,6 +141,20 @@ mod flipper {
                 Some(project) => Ok(project),
             }
         }
+        #[ink(message)]
+        pub fn add_project(&mut self, name: Vec<u8>, meta: Vec<u8>) -> Result<()> {
+            let caller = self.env().caller();
+            let index = self.project_index;
+            let project = Project {
+                owner: caller,
+                name,
+                meta,
+                ..Default::default()
+            };
+            self.projects.insert(index, &project);
+            self.project_index += 1;
+            Ok(())
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
@@ -164,6 +168,15 @@ mod flipper {
         /// Imports `ink_lang` so we can use `#[ink::test]`.
         use ink_lang as ink;
 
+
+        fn default_accounts(
+        ) -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
+            ink_env::test::default_accounts::<Environment>()
+        }
+
+        fn set_next_caller(caller: AccountId) {
+            ink_env::test::set_caller::<Environment>(caller);
+        }
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
@@ -176,20 +189,21 @@ mod flipper {
             );
         }
 
-        /// We test a simple use case of our contract.
+        /// We test a simple use case of our contract. Adds a default project 0.
         #[ink::test]
         fn it_works() {
+            let default_accounts = default_accounts();
+            set_next_caller(default_accounts.alice);
             let mut flipper = Chocolate::new();
             assert_eq!(flipper.get_project(0), Err(Error::ProjectDoesNotExist));
             flipper.flip().expect("Should add project 0");
             assert_eq!(
                 flipper.get_project(0),
                 Ok(Project {
-                    review_count: 100,
-                    rating_sum: 5,
-                    owner: Default::default(),
+                    owner: default_accounts.alice,
                     name: "CHOC".to_owned().into_bytes(),
                     meta: Default::default(),
+                    ..Default::default()
                 })
             );
         }
