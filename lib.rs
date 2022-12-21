@@ -96,6 +96,8 @@ mod flipper {
         ReviewAlreadyExists,
         /// Queried project does not exist
         ProjectDoesNotExist,
+        /// Queried Review does not exist
+        ReviewDoesNotExist,
     }
 
     /// Type alias for the contract's result type.
@@ -139,6 +141,22 @@ mod flipper {
             }
         }
         #[ink(message)]
+        pub fn get_review(&self, project_id: u32, user: AccountId) -> Result<Review> {
+            let maybe_index = self
+                .reviews_projects_list
+                .iter()
+                .position(|s| s.0.eq(&user) && s.1.eq(&project_id));
+            match maybe_index {
+                None => Err(Error::ReviewDoesNotExist),
+                Some(index) => {
+                    let as_key: u32 = index.try_into().expect("Should fit");
+                    let maybe_review = self.reviews.get(as_key);
+                    let review = maybe_review.expect("Valid keys should have review entries");
+                    Ok(review)
+                }
+            }
+        }
+        #[ink(message)]
         pub fn add_project(&mut self, name: Vec<u8>, meta: Vec<u8>) -> Result<()> {
             let caller = self.env().caller();
             let index = self.project_index;
@@ -155,7 +173,7 @@ mod flipper {
         #[ink(message)]
         pub fn add_review(&mut self, body: Vec<u8>, rating: u32, project_id: u32) -> Result<()> {
             let caller = self.env().caller();
-            let review = Review {
+            let mut review = Review {
                 owner: caller,
                 body,
                 rating,
@@ -171,6 +189,7 @@ mod flipper {
                             self.reviews_projects_list.insert(index, key);
                             let as_key_t: u32 =
                                 index.try_into().expect("Vec should not exceed u32 size??"); // not sure.
+                            review.id = as_key_t;
                             self.reviews.insert(as_key_t, &review);
                             Ok(())
                         }
@@ -230,6 +249,31 @@ mod flipper {
             );
             assert_eq!(flipper.project_index, 1);
         }
-        
+        #[ink::test]
+        fn it_works_review() {
+            let default_accounts = default_accounts();
+            set_next_caller(default_accounts.alice);
+            let mut flipper = Chocolate::new();
+            assert_eq!(flipper.get_review(0, default_accounts.alice.clone()), Err(Error::ReviewDoesNotExist));
+            flipper.flip().expect("Should add test project 0");
+            flipper
+                .add_review(Default::default(), 10, 0)
+                .expect("Adding review should succeed");
+            let maybe_key = flipper
+                .reviews_projects_list
+                .iter()
+                .position(|s| s.0.eq(&default_accounts.alice) && s.1.eq(&0));
+
+            assert_eq!(maybe_key, Some(0)); // first key array.
+            assert_eq!(
+                flipper.get_review(0, default_accounts.alice),
+                Ok(Review {
+                    owner: default_accounts.alice,
+                    body: Default::default(),
+                    rating: 10,
+                    id: maybe_key.unwrap().try_into().expect("Should fit"),
+                })
+            )
+        }
     }
 }
