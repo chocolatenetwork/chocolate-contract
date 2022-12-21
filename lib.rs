@@ -15,13 +15,11 @@ mod flipper {
     #[ink(storage)]
     pub struct Chocolate {
         project_index: u32,
-        review_index: u32,
         /// Stores a project from id in storage
         projects: Mapping<u32, Project>,
         // Multivalued keys would allow wider scope for reviews
-        reviews: Mapping<u32, Review>,
         /// Index in reviews_projects_list arr. -> struct
-        reviews_projects: Mapping<u32, ReviewProject>,
+        reviews: Mapping<u32, Review>,
         /// Accountid + projectId
         reviews_projects_list: Vec<(AccountId, u32)>,
     }
@@ -122,7 +120,6 @@ mod flipper {
         /// to `false` and vice versa.
         #[ink(message)]
         pub fn flip(&mut self) -> Result<()> {
-            
             self.add_project("CHOC".bytes().collect(), Default::default())
         }
 
@@ -155,6 +152,33 @@ mod flipper {
             self.project_index += 1;
             Ok(())
         }
+        #[ink(message)]
+        pub fn add_review(&mut self, body: Vec<u8>, rating: u32, project_id: u32) -> Result<()> {
+            let caller = self.env().caller();
+            let review = Review {
+                owner: caller,
+                body,
+                rating,
+                ..Default::default()
+            };
+            let maybe_project = self.projects.get(project_id);
+            match maybe_project {
+                None => Err(Error::ProjectDoesNotExist),
+                Some(_) => {
+                    let key = (caller.clone(), project_id);
+                    match self.reviews_projects_list.binary_search(&key) {
+                        Err(index) => {
+                            self.reviews_projects_list.insert(index, key);
+                            let as_key_t: u32 =
+                                index.try_into().expect("Vec should not exceed u32 size??"); // not sure.
+                            self.reviews.insert(as_key_t, &review);
+                            Ok(())
+                        }
+                        Ok(_) => Err(Error::ReviewAlreadyExists),
+                    }
+                }
+            }
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
@@ -168,9 +192,7 @@ mod flipper {
         /// Imports `ink_lang` so we can use `#[ink::test]`.
         use ink_lang as ink;
 
-
-        fn default_accounts(
-        ) -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
+        fn default_accounts() -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
             ink_env::test::default_accounts::<Environment>()
         }
 
@@ -206,6 +228,8 @@ mod flipper {
                     ..Default::default()
                 })
             );
+            assert_eq!(flipper.project_index, 1);
         }
+        
     }
 }
