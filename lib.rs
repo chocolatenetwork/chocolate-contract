@@ -125,12 +125,6 @@ mod flipper {
             self.add_project("CHOC".bytes().collect(), Default::default())
         }
 
-        /// Simply returns the current value of our `bool`.
-        // #[ink(message)]
-        // pub fn get_projects(&self) -> Mapping<u32,Project> {
-        //     // Not needed, iter. in ui https://substrate.stackexchange.com/questions/2562/how-to-iterate-over-mappingk-v?rq=1
-        //     self.projects.into()
-        // }
         /// Simply returns the current value of our `project`.
         #[ink(message)]
         pub fn get_project(&self, id: u32) -> Result<Project> {
@@ -173,23 +167,26 @@ mod flipper {
         #[ink(message)]
         pub fn add_review(&mut self, body: Vec<u8>, rating: u32, project_id: u32) -> Result<()> {
             let caller = self.env().caller();
-            let mut review = Review {
-                owner: caller,
-                body,
-                rating,
-                ..Default::default()
-            };
+
             let maybe_project = self.projects.get(project_id);
             match maybe_project {
                 None => Err(Error::ProjectDoesNotExist),
-                Some(_) => {
+                Some(mut project) => {
                     let key = (caller.clone(), project_id);
                     match self.reviews_projects_list.binary_search(&key) {
                         Err(index) => {
-                            self.reviews_projects_list.insert(index, key);
                             let as_key_t: u32 =
                                 index.try_into().expect("Vec should not exceed u32 size??"); // not sure.
-                            review.id = as_key_t;
+                            project.rating_sum += rating;
+                            project.review_count += 1;
+                            let review = Review {
+                                owner: caller,
+                                body,
+                                rating,
+                                id: as_key_t,
+                            };
+                            self.reviews_projects_list.insert(index, key);
+                            self.projects.insert(project_id, &project);
                             self.reviews.insert(as_key_t, &review);
                             Ok(())
                         }
@@ -222,10 +219,7 @@ mod flipper {
         #[ink::test]
         fn default_works() {
             let flipper = Chocolate::default();
-            assert_eq!(
-                flipper.get_project(0),
-                Err(Error::ProjectDoesNotExist)
-            );
+            assert_eq!(flipper.get_project(0), Err(Error::ProjectDoesNotExist));
         }
 
         /// We test a simple use case of our contract. Adds a default project 0.
@@ -252,7 +246,10 @@ mod flipper {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
             let mut flipper = Chocolate::new();
-            assert_eq!(flipper.get_review(0, default_accounts.alice.clone()), Err(Error::ReviewDoesNotExist));
+            assert_eq!(
+                flipper.get_review(0, default_accounts.alice.clone()),
+                Err(Error::ReviewDoesNotExist)
+            );
             flipper.flip().expect("Should add test project 0");
             flipper
                 .add_review(Default::default(), 10, 0)
