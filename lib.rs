@@ -224,9 +224,7 @@ mod flipper {
             let flipper = Chocolate::default();
             assert_eq!(
                 flipper.get_project(0),
-                Ok(Project {
-                    ..Default::default()
-                })
+                Err(Error::ProjectDoesNotExist)
             );
         }
 
