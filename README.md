@@ -9,7 +9,7 @@ ink! is an [eDSL](https://wiki.haskell.org/Embedded_domain_specific_language) to
 
 </div>
 
-## Updateing Rust Environenment
+## Updating Rust Environenment
 
 To work wiht this contract, we need to add some `Rust` source code to our Substrate development environment.
 
