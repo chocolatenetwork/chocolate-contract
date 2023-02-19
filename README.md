@@ -72,6 +72,8 @@ cargo install contracts-node --git https://github.com/chocolatenetwork/contracts
 
 You can verify the installation buy running: `substrate-contracts-node --version`.
 
+<!-------------------------------- TODO ---------------------------------->
+<!-- These results bellow will be changed based on final test in Chocolate Contracts, after the contract is done -->
 ## Test the contract
 
 At the bottom of the `lib.rs` source code file, there are simple test cases to verify the functionality of the contract. These are annotated using the `#[ink(test)]` macro. You can test whether this code is functioning as expected using the offchain test environment.
@@ -89,9 +91,10 @@ cargo contract test
 The command should compile the contract and run the tests. If the tests pass, you will see the output similar to the following to indicate successful test completion:
 
 ```bash
-running 2 tests
-test chocolate::tests::it_works ... ok
+running 3 tests
 test chocolate::tests::default_works ... ok
+test chocolate::tests::it_works ... ok
+test chocolate::tests::it_works_review ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 ```
