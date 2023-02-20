@@ -1,17 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use ink_lang as ink;
-// PackedLayout
 #[ink::contract]
 mod chocolate {
-    use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
-    use ink_storage::Mapping;
-    // Ref: https://github.com/paritytech/ink/blob/master/examples/mother/Cargo.toml
-    use ink_prelude::vec::Vec;
+    use ink::storage::Mapping;
+
+    use ink::prelude::vec::Vec;
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
-    #[derive(Default, SpreadAllocate)]
     #[ink(storage)]
     pub struct Chocolate {
         project_index: u32,
@@ -24,38 +20,20 @@ mod chocolate {
         reviews_projects_list: Vec<(AccountId, u32)>,
     }
 
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-    )]
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
     pub struct ReviewProject {
         review_id: u32,
         project_id: u32,
     }
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-        Default,
-    )]
+
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone, Default)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
     pub struct Review {
         id: u32,
@@ -63,21 +41,12 @@ mod chocolate {
         rating: u32,
         owner: AccountId,
     }
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-        Default,
-    )]
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone, Default)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
+    
     pub struct Project {
         review_count: u32,
         rating_sum: u32,
@@ -103,10 +72,15 @@ mod chocolate {
     /// Type alias for the contract's result type.
     pub type Result<T> = core::result::Result<T, Error>;
     impl Chocolate {
-        /// Constructor that initializes the contract;
+        // Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new() -> Self {
-            ink_lang::utils::initialize_contract(|_| {})
+        pub fn new(init_value: u32) -> Self {
+            Self {
+                project_index: init_value,
+                projects: Default::default(),
+                reviews: Default::default(),
+                reviews_projects_list: Default::default(),
+            }
         }
 
         /// Constructor that initializes the `bool` value to `false`.
@@ -114,7 +88,7 @@ mod chocolate {
         /// Constructors can delegate to other constructors.
         #[ink(constructor)]
         pub fn default() -> Self {
-            ink_lang::utils::initialize_contract(|_| {})
+            Self::new(Default::default())
         }
 
         /// A message that can be called on instantiated contracts.
@@ -206,14 +180,12 @@ mod chocolate {
         use super::*;
 
         /// Imports `ink_lang` so we can use `#[ink::test]`.
-        use ink_lang as ink;
-
-        fn default_accounts() -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
-            ink_env::test::default_accounts::<Environment>()
+        fn default_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
+            ink::env::test::default_accounts::<Environment>()
         }
 
         fn set_next_caller(caller: AccountId) {
-            ink_env::test::set_caller::<Environment>(caller);
+            ink::env::test::set_caller::<Environment>(caller);
         }
         /// We test if the default constructor does its job.
         #[ink::test]
