@@ -3,7 +3,6 @@
 #[ink::contract]
 mod chocolate {
     use ink::storage::Mapping;
-
     use ink::prelude::vec::Vec;
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
@@ -30,7 +29,7 @@ mod chocolate {
         project_id: u32,
     }
 
-    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone, Default)]
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
@@ -41,7 +40,7 @@ mod chocolate {
         rating: u32,
         owner: AccountId,
     }
-    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone, Default)]
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
@@ -92,11 +91,9 @@ mod chocolate {
         }
 
         /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
         #[ink(message)]
-        pub fn flip(&mut self) -> Result<()> {
-            self.add_project("CHOC".bytes().collect(), Default::default())
+        pub fn add(&mut self) -> Result<()> {
+            self.add_project("CHOC".bytes().collect(), Default::default(), Default::default(), Default::default())
         }
 
         /// Simply returns the current value of our `project`.
@@ -125,14 +122,15 @@ mod chocolate {
             }
         }
         #[ink(message)]
-        pub fn add_project(&mut self, name: Vec<u8>, meta: Vec<u8>) -> Result<()> {
+        pub fn add_project(&mut self, name: Vec<u8>, meta: Vec<u8>, review_count: u32, rating_sum: u32) -> Result<()> {
             let caller = self.env().caller();
             let index = self.project_index;
             let project = Project {
                 owner: caller,
                 name,
                 meta,
-                ..Default::default()
+                review_count,
+                rating_sum,
             };
             self.projects.insert(index, &project);
             self.project_index += 1;
@@ -201,14 +199,15 @@ mod chocolate {
             set_next_caller(default_accounts.alice);
             let mut chocolate = Chocolate::new(0);
             assert_eq!(chocolate.get_project(0), Err(Error::ProjectDoesNotExist));
-            chocolate.flip().expect("Should add project 0");
+            chocolate.add().expect("Should add project 0");
             assert_eq!(
                 chocolate.get_project(0),
                 Ok(Project {
                     owner: default_accounts.alice,
                     name: "CHOC".to_owned().into_bytes(),
                     meta: Default::default(),
-                    ..Default::default()
+                    review_count: 0,
+                    rating_sum: 0,
                 })
             );
             assert_eq!(chocolate.project_index, 1);
@@ -222,7 +221,7 @@ mod chocolate {
                 chocolate.get_review(0, default_accounts.alice.clone()),
                 Err(Error::ReviewDoesNotExist)
             );
-            chocolate.flip().expect("Should add test project 0");
+            chocolate.add().expect("Should add test project 0");
             chocolate
                 .add_review(Default::default(), 10, 0)
                 .expect("Adding review should succeed");
