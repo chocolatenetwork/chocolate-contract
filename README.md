@@ -9,7 +9,7 @@ ink! is an [eDSL](https://wiki.haskell.org/Embedded_domain_specific_language) to
 
 </div>
 
-## Updateing Rust Environenment
+## Updating Rust Environenment
 
 To work wiht this contract, we need to add some `Rust` source code to our Substrate development environment.
 
@@ -337,4 +337,4 @@ Data Tuple(Tuple { ident: Some("Ok"), values: [Bool(true)] })
 
 ## ink! 4.0 backward incompatibility
 
-More details about migrating from ink! 3.0 to 4.0 can be found [here](https://use.ink/faq/migrating-from-ink-3-to-4/#compatibility). 
+More details about migrating from ink! 3.0 to 4.0 can be found [here](https://use.ink/faq/migrating-from-ink-3-to-4/#compatibility).
