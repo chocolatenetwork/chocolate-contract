@@ -199,7 +199,7 @@ mod chocolate {
         fn it_works() {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
-            let mut chocolate = Chocolate::new();
+            let mut chocolate = Chocolate::new(0);
             assert_eq!(chocolate.get_project(0), Err(Error::ProjectDoesNotExist));
             chocolate.flip().expect("Should add project 0");
             assert_eq!(
@@ -217,7 +217,7 @@ mod chocolate {
         fn it_works_review() {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
-            let mut chocolate = Chocolate::new();
+            let mut chocolate = Chocolate::new(0);
             assert_eq!(
                 chocolate.get_review(0, default_accounts.alice.clone()),
                 Err(Error::ReviewDoesNotExist)
