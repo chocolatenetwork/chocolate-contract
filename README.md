@@ -86,7 +86,7 @@ To test the contract:
 3. Use the `test` subcommand to execute the test for the `chocolate` contract by running the following command:
 
 ```bash
-cargo contract test
+cargo test
 ```
 
 The command should compile the contract and run the tests. If the tests pass, you will see the output similar to the following to indicate successful test completion:
