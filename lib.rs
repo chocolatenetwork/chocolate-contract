@@ -4,6 +4,7 @@
 mod chocolate {
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
+    use ink::storage::traits::Storable;
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -17,6 +18,12 @@ mod chocolate {
         reviews: Mapping<u32, Review>,
         /// Accountid + projectId
         reviews_projects_list: Vec<(AccountId, u32)>,
+        /// Stores the address of account that have initiated the verification flow.
+        account_verification_flow_initiation: Mapping<AccountId, bool>, // TODO: Maybe use a bool?
+        // Stores the count of verification attempts.
+        verifications_count: u32,
+        // Stores the addresses of accounts authorized to verify the identity.
+        authorizers: Vec<AccountId>,
     }
 
     #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
@@ -66,6 +73,12 @@ mod chocolate {
         ProjectDoesNotExist,
         /// Queried Review does not exist
         ReviewDoesNotExist,
+        /// Returned if the verification flow is already initiated.
+        VerificationFlowAlreadyInitiated,
+        /// Returned if the verification flow is not initiated.
+        VerificationFlowNotInitiated,
+        /// Return if the flow is not authorized.
+        NotAuthorized,
     }
 
     /// Type alias for the contract's result type.
@@ -79,6 +92,9 @@ mod chocolate {
                 projects: Default::default(),
                 reviews: Default::default(),
                 reviews_projects_list: Default::default(),
+                account_verification_flow_initiation: Default::default(),
+                verifications_count: Default::default(),
+                authorizers: Default::default(),
             }
         }
 
@@ -166,6 +182,51 @@ mod chocolate {
                     }
                 }
             }
+        }
+
+        #[ink(message)]
+        pub fn initiate_verfication_flow(&mut self) -> Result<Vec<u8>> {
+            // Cannot re-initiate flow if already begun
+            if self
+                .account_verification_flow_initiation
+                .contains(&self.env().caller())
+                {
+                    return Err(Error::VerificationFlowAlreadyInitiated);
+                }
+            // Increment verification flow for uniqueness
+            self.verifications_count = self.verifications_count.saturating_add(1);
+
+            // Combine account and id for unique signable message
+            let mut verification_message = self.env().caller().encode(&mut Vec::new());
+            todo!("Add verifications_count to verification message");
+            Ok(todo!("Sign verification message"))
+        }
+
+        #[ink(message)]
+        pub fn verify_identity_response(&mut self, signature: [u8; 65]) -> Result<bool> {
+            use sp_core::sr25519::Signature;
+
+            // Ensure flow began
+            if !self
+                .account_verification_flow_initiation
+                .contains(&self.env().caller())
+                {
+                    return Err(Error::VerificationFlowNotInitiated);
+                }
+            
+            if !self.authorizers.contains(&self.env().caller()) {
+                return Err(Error::NotAuthorized);
+            }
+
+            // Get ECDSA public key out of account - https://substrate.dev/rustdocs/v2.0.0/sp_core/crypto/trait.PublicKey.html
+
+            // Verify using the caller's signature
+            // let recovered_key ink_env::ecdsa_recover(signature, message_hash, output);
+ 
+            // Check recovered key == candidate_pub_key
+
+            // If true:
+            Ok(true) 
         }
     }
 
