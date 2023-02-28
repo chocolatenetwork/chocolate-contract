@@ -2,9 +2,9 @@
 
 #[ink::contract]
 mod chocolate {
-    use ink::storage::Mapping;
-    use ink::prelude::vec::Vec;
-    use ink::storage::traits::Storable;
+   pub use ink::prelude::vec::Vec;
+   pub use ink::storage::traits::Storable;
+   pub use ink::storage::Mapping;
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
@@ -20,11 +20,21 @@ mod chocolate {
         /// Accountid + projectId
         reviews_projects_list: Vec<(AccountId, u32)>,
         /// Stores the address of account that have initiated the verification flow.
-        account_verification_flow_initiation: Mapping<AccountId, u32>,
+        account_verification_flow_initiation: Mapping<AccountId, VerifyDeets>,
         // Stores the count of verification attempts.
         verifications_count: u32,
         // Stores the addresses of accounts authorized to verify the identity.
         authorizers: Vec<AccountId>,
+    }
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
+    )]
+    pub struct VerifyDeets {
+        index: u32,
+        // FixMe: Is this more or less space than a hash?
+        message: Vec<u8>,
     }
 
     #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
@@ -53,7 +63,7 @@ mod chocolate {
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
-    
+
     pub struct Project {
         review_count: u32,
         rating_sum: u32,
@@ -80,12 +90,14 @@ mod chocolate {
         VerificationFlowNotInitiated,
         /// Return if the flow is not authorized.
         NotAuthorized,
+        /// Invalid signature
+        InvalidSignature,
     }
 
     /// Type alias for the contract's result type.
     pub type Result<T> = core::result::Result<T, Error>;
     impl Chocolate {
-        // Constructor that initializes the `bool` value to the given `init_value`.
+        // Constructure that initialises the contract
         #[ink(constructor)]
         pub fn new(init_value: u32) -> Self {
             Self {
@@ -99,7 +111,7 @@ mod chocolate {
             }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
+        /// Constructor that initializes the Contract to default value
         ///
         /// Constructors can delegate to other constructors.
         #[ink(constructor)]
@@ -110,7 +122,12 @@ mod chocolate {
         /// A message that can be called on instantiated contracts.
         #[ink(message)]
         pub fn add(&mut self) -> Result<()> {
-            self.add_project("CHOC".bytes().collect(), Default::default(), Default::default(), Default::default())
+            self.add_project(
+                "CHOC".bytes().collect(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            )
         }
 
         /// Simply returns the current value of our `project`.
@@ -139,7 +156,13 @@ mod chocolate {
             }
         }
         #[ink(message)]
-        pub fn add_project(&mut self, name: Vec<u8>, meta: Vec<u8>, review_count: u32, rating_sum: u32) -> Result<()> {
+        pub fn add_project(
+            &mut self,
+            name: Vec<u8>,
+            meta: Vec<u8>,
+            review_count: u32,
+            rating_sum: u32,
+        ) -> Result<()> {
             let caller = self.env().caller();
             let index = self.project_index;
             let project = Project {
@@ -185,7 +208,7 @@ mod chocolate {
             }
         }
 
-        // TODO: [Please review] 
+        // TODO: [Please review]
         // Add authorizer, way to remove a project
         #[ink(message)]
         pub fn add_authorizer(&mut self, authorizer: AccountId) -> Result<()> {
@@ -197,34 +220,49 @@ mod chocolate {
         #[ink(message)]
         pub fn initiate_verfication_flow(&mut self) -> Result<Vec<u8>> {
             // Cannot re-initiate flow if already begun
-            if self
+            let verify_deets = self
                 .account_verification_flow_initiation
-                .contains(&self.env().caller())
-                {
-                    return Err(Error::VerificationFlowAlreadyInitiated);
-                }
-            // Increment verification flow for uniqueness
-            self.verifications_count = self.verifications_count.saturating_add(1);
+                .get(&self.env().caller());
 
-            // Combine account and id for unique signable message
-            let mut verification_message = self.env().caller().encode();
-            verification_message.extend_from_slice(&self.verifications_count.to_be_bytes());
- 
-            Ok(verification_message)
+            match verify_deets {
+                Some(verify_deet) => Ok(verify_deet.message),
+                None => {
+                    // Increment verification flow for uniqueness
+
+                    self.verifications_count = self.verifications_count.saturating_add(1);
+
+                    // Combine account and id for unique signable message
+
+                    let mut verification_message = Vec::new();
+                    self.env().caller().encode(&mut verification_message);
+                    verification_message.extend_from_slice(&self.verifications_count.to_be_bytes());
+                    
+                    let verify_deet: VerifyDeets = 
+                        VerifyDeets { index:  self.verifications_count, message: verification_message };
+                    self.account_verification_flow_initiation.insert(&self.env().caller(), &verify_deet);
+                    
+                    Ok(verify_deet.message)
+                }
+            }
+            // if self
+            //     .account_verification_flow_initiation
+            //     .contains(&self.env().caller())
+            //     {
+            //         return Err(Error::VerificationFlowAlreadyInitiated);
+            //     }
         }
 
         #[ink(message)]
         pub fn verify_identity_response(&mut self, signature: [u8; 65]) -> Result<bool> {
-            use sp_core::sr25519::Signature;
-
             // Ensure flow began
+            // Todo: Extract accountId later, the person authorizer can't call as the user
             if !self
                 .account_verification_flow_initiation
                 .contains(&self.env().caller())
-                {
-                    return Err(Error::VerificationFlowNotInitiated);
-                }
-            
+            {
+                return Err(Error::VerificationFlowNotInitiated);
+            }
+
             if !self.authorizers.contains(&self.env().caller()) {
                 return Err(Error::NotAuthorized);
             }
@@ -233,11 +271,11 @@ mod chocolate {
 
             // Verify using the caller's signature
             // let recovered_key ink_env::ecdsa_recover(signature, message_hash, output);
- 
+
             // Check recovered key == candidate_pub_key
 
             // If true:
-            Ok(true) 
+            Ok(true)
         }
     }
 
