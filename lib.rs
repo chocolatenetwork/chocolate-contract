@@ -20,7 +20,7 @@ mod chocolate {
         /// Accountid + projectId
         reviews_projects_list: Vec<(AccountId, u32)>,
         /// Stores the address of account that have initiated the verification flow.
-        account_verification_flow_initiation: Mapping<AccountId, VerifyDeets>,
+        account_verification_flow_initiation: Mapping<AccountId, VerifyDetails>,
         // Stores the count of verification attempts.
         verifications_count: u32,
         // Stores the addresses of accounts authorized to verify the identity.
@@ -31,9 +31,8 @@ mod chocolate {
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
-    pub struct VerifyDeets {
+    pub struct VerifyDetails {
         index: u32,
-        // FixMe: Is this more or less space than a hash?
         message: Vec<u8>,
     }
 
@@ -220,12 +219,12 @@ mod chocolate {
         #[ink(message)]
         pub fn initiate_verfication_flow(&mut self) -> Result<Vec<u8>> {
             // Cannot re-initiate flow if already begun
-            let verify_deets = self
+            let verify_details = self
                 .account_verification_flow_initiation
                 .get(&self.env().caller());
 
-            match verify_deets {
-                Some(verify_deet) => Ok(verify_deet.message),
+            match verify_details {
+                Some(verify_detail) => Ok(verify_detail.message),
                 None => {
                     // Increment verification flow for uniqueness
 
@@ -237,11 +236,11 @@ mod chocolate {
                     self.env().caller().encode(&mut verification_message);
                     verification_message.extend_from_slice(&self.verifications_count.to_be_bytes());
                     
-                    let verify_deet: VerifyDeets = 
-                        VerifyDeets { index:  self.verifications_count, message: verification_message };
-                    self.account_verification_flow_initiation.insert(&self.env().caller(), &verify_deet);
+                    let verify_detail: VerifyDetails = 
+                        VerifyDetails { index:  self.verifications_count, message: verification_message };
+                    self.account_verification_flow_initiation.insert(&self.env().caller(), &verify_detail);
                     
-                    Ok(verify_deet.message)
+                    Ok(verify_detail.message)
                 }
             }
             // if self
