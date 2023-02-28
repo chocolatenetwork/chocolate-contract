@@ -207,9 +207,7 @@ mod chocolate {
             self.verifications_count = self.verifications_count.saturating_add(1);
 
             // Combine account and id for unique signable message
-            let mut verification_message = Vec::with_capacity(32);
-            verification_message.extend_from_slice(&self.env().caller().encode());
-
+            let mut verification_message = self.env().caller().encode();
             verification_message.extend_from_slice(&self.verifications_count.to_be_bytes());
  
             Ok(verification_message)
