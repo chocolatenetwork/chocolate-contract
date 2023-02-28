@@ -5,6 +5,7 @@ mod chocolate {
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
     use ink::storage::traits::Storable;
+
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -19,7 +20,7 @@ mod chocolate {
         /// Accountid + projectId
         reviews_projects_list: Vec<(AccountId, u32)>,
         /// Stores the address of account that have initiated the verification flow.
-        account_verification_flow_initiation: Mapping<AccountId, bool>, // TODO: Maybe use a bool?
+        account_verification_flow_initiation: Mapping<AccountId, u32>,
         // Stores the count of verification attempts.
         verifications_count: u32,
         // Stores the addresses of accounts authorized to verify the identity.
@@ -184,6 +185,15 @@ mod chocolate {
             }
         }
 
+        // TODO: [Please review] 
+        // Add authorizer, way to remove a project
+        #[ink(message)]
+        pub fn add_authorizer(&mut self, authorizer: AccountId) -> Result<()> {
+            let index = self.authorizers.len();
+            self.authorizers.insert(index, authorizer);
+            Ok(())
+        }
+
         #[ink(message)]
         pub fn initiate_verfication_flow(&mut self) -> Result<Vec<u8>> {
             // Cannot re-initiate flow if already begun
@@ -197,9 +207,12 @@ mod chocolate {
             self.verifications_count = self.verifications_count.saturating_add(1);
 
             // Combine account and id for unique signable message
-            let mut verification_message = self.env().caller().encode(&mut Vec::new());
-            todo!("Add verifications_count to verification message");
-            Ok(todo!("Sign verification message"))
+            let mut verification_message = Vec::with_capacity(32);
+            verification_message.extend_from_slice(&self.env().caller().encode());
+
+            verification_message.extend_from_slice(&self.verifications_count.to_be_bytes());
+ 
+            Ok(verification_message)
         }
 
         #[ink(message)]
