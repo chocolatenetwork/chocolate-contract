@@ -25,6 +25,8 @@ mod chocolate {
         verifications_count: u32,
         // Stores the addresses of accounts authorized to verify the identity.
         authorizers: Vec<AccountId>,
+        // Stores the addresses of accounts that have been verified.
+        verified_accounts: Vec<AccountId>,
     }
     #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
@@ -91,6 +93,8 @@ mod chocolate {
         NotAuthorized,
         /// Invalid signature
         InvalidSignature,
+        /// Invalid message
+        VerificationFailed,
     }
 
     /// Type alias for the contract's result type.
@@ -107,6 +111,7 @@ mod chocolate {
                 account_verification_flow_initiation: Default::default(),
                 verifications_count: Default::default(),
                 authorizers: Default::default(),
+                verified_accounts: Default::default(),
             }
         }
 
@@ -266,15 +271,34 @@ mod chocolate {
                 return Err(Error::NotAuthorized);
             }
 
-            // Get ECDSA public key out of account - https://substrate.dev/rustdocs/v2.0.0/sp_core/crypto/trait.PublicKey.html
+            // Get ECDSA public key out of account
+            let candidate_pub_key = self.env().caller().ecdsa_public_key(); // TODO: [Work in progress] - This is not working yet - 
 
             // Verify using the caller's signature
-            // let recovered_key ink_env::ecdsa_recover(signature, message_hash, output);
+            // https://substrate.dev/rustdocs/v2.0.0/sp_io/crypto/fn.secp256k1_ecdsa_recover.html
+            let message_hash: [u8; 32] = [0; 32]; // TODO: [Please review] - Is this the right way to do this?
+
+            let output: [u8; 33] = [0; 33]; // TODO: [Please review] - Is this the right way to do this?
+
+            let recovered_key = ink::env::ecdsa_recover(
+                &signature,
+                &message_hash,
+                &mut output
+            );
+
+            let index = self.project_index;
 
             // Check recovered key == candidate_pub_key
+            if recovered_key == candidate_pub_key {
+                // Remove flow initiation
+                self.account_verification_flow_initiation.take(&self.env().caller());
+                // Add to verified accounts
+                self.verified_accounts.insert(index.try_into().unwrap(), self.env().caller());
+                Ok(true)
+            } else {
+                Err(Error::VerificationFailed)
+            }
 
-            // If true:
-            Ok(true)
         }
     }
 
