@@ -4,8 +4,11 @@ use ink_lang as ink;
 // PackedLayout
 #[ink::contract]
 mod flipper {
+    use ink_eth_compatibility::ECDSAPublicKey;
     use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
     use ink_storage::Mapping;
+    use scale::Encode;
+    // scale::Encode::encode(&self.env().caller(), &mutverification_message)
     // Ref: https://github.com/paritytech/ink/blob/master/examples/mother/Cargo.toml
     use ink_prelude::vec::Vec;
     /// Defines the storage of your contract.
@@ -22,6 +25,33 @@ mod flipper {
         reviews: Mapping<u32, Review>,
         /// Accountid + projectId
         reviews_projects_list: Vec<(AccountId, u32)>,
+        /// Stores the address of account that have initiated the verification flow.
+        account_verification_flow_initiation: Mapping<AccountId, VerifyDetails>,
+        // Stores the count of verification attempts.
+        verifications_count: u32,
+        // Stores the addresses of accounts authorized to verify the identity.
+        authorizers: Vec<AccountId>,
+        // Stores the addresses of accounts that have been verified.
+        verified_accounts: Vec<AccountId>,
+    }
+
+    #[derive(
+        Debug,
+        PartialEq,
+        scale::Encode,
+        scale::Decode,
+        Clone,
+        SpreadLayout,
+        PackedLayout,
+        SpreadAllocate,
+    )]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+    )]
+    pub struct VerifyDetails {
+        index: u32,
+        message: Vec<u8>,
     }
 
     #[derive(
@@ -85,6 +115,16 @@ mod flipper {
         meta: Vec<u8>,
         name: Vec<u8>,
     }
+    // Todo: Separate account types, into Account struct from spec. Add create_user and create_project at verify
+    /// Account Types
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
+    #[cfg_attr(feature = "std", derive(::scale_info::TypeInfo))]
+    pub enum AccountType {
+        /// User account
+        User,
+        /// Project Account
+        Project,
+    }
 
     /// Errors that can occur upon calling this contract.
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
@@ -98,6 +138,16 @@ mod flipper {
         ProjectDoesNotExist,
         /// Queried Review does not exist
         ReviewDoesNotExist,
+        /// Returned if the verification flow is already initiated.
+        VerificationFlowAlreadyInitiated,
+        /// Returned if the verification flow is not initiated.
+        VerificationFlowNotInitiated,
+        /// Return if the flow is not authorized.
+        NotAuthorized,
+        /// Invalid signature
+        InvalidSignature,
+        /// Invalid message
+        VerificationFailed,
     }
 
     /// Type alias for the contract's result type.
@@ -194,6 +244,113 @@ mod flipper {
                     }
                 }
             }
+        }
+        // Add someone to the list of authorizers
+        #[ink(message)]
+        pub fn add_authorizer(&mut self, authorizer: AccountId) -> Result<()> {
+
+            match self.authorizers.binary_search(&authorizer){
+                Ok(_)=>{
+                    Ok(())
+                }
+                Err(index) =>{
+                    self.authorizers.insert(index, authorizer);
+                    Ok(())
+                }
+            }
+        }
+
+        #[ink(message)]
+        pub fn initiate_verfication_flow(&mut self) -> Result<Vec<u8>> {
+            // Cannot re-initiate flow if already begun
+            let verify_details = self
+                .account_verification_flow_initiation
+                .get(&self.env().caller());
+
+            match verify_details {
+                Some(verify_detail) => Ok(verify_detail.message),
+                None => {
+                    // Increment verification flow for uniqueness
+
+                    self.verifications_count = self.verifications_count.saturating_add(1);
+
+                    // Combine account and id for unique signable message
+
+                    let mut verification_message = self.env().caller().encode();
+                    verification_message.extend_from_slice(&self.verifications_count.to_be_bytes());
+
+                    let verify_detail: VerifyDetails = VerifyDetails {
+                        index: self.verifications_count,
+                        message: verification_message,
+                    };
+                    self.account_verification_flow_initiation
+                        .insert(&self.env().caller(), &verify_detail);
+
+                    Ok(verify_detail.message)
+                }
+            }
+        }
+
+        #[ink(message)]
+        pub fn verify_identity_response(
+            &mut self,
+            signature: [u8; 65],
+            address_to_verify: AccountId,
+        ) -> Result<bool> {
+            // Ensure is authorized
+            if !self.authorizers.contains(&self.env().caller()) {
+                return Err(Error::NotAuthorized);
+            }
+            // Ensure flow began
+
+            let flow_init = self
+                .account_verification_flow_initiation
+                .get(&address_to_verify);
+
+            if flow_init.is_none() {
+                return Err(Error::VerificationFlowNotInitiated);
+            }
+
+            let details = flow_init.unwrap();
+
+            // Verify using the caller's signature
+            // https://substrate.dev/rustdocs/v2.0.0/sp_io/crypto/fn.secp256k1_ecdsa_recover.html
+
+            // Hash the message to pass to ecdsa_recover
+            let message_hash: [u8; 32] = Self::hash_vec(details.message);
+            
+            let mut recovered: [u8; 33] = [0; 33]; 
+            let recovered_result = ink_env::ecdsa_recover(&signature, &message_hash.into(), &mut recovered);
+
+
+            let ecdsa_output: ECDSAPublicKey = recovered.into();
+            let output_as_account_id = ecdsa_output.to_default_account_id();
+
+            // ink
+            // Check recovered key == candidate_pub_key
+            match recovered_result {
+                Ok(_) => {
+                    if address_to_verify == output_as_account_id {
+                        // Remove flow initiation
+                        self.account_verification_flow_initiation
+                            .remove(&self.env().caller());
+                        // Add to verified accounts
+                        self.verified_accounts
+                            .push(address_to_verify);
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    }
+                }
+                Err(_) => Err(Error::VerificationFailed),
+            }
+        }
+
+        pub fn hash_vec(input: Vec<u8>) -> [u8; 32] {
+            use ink_env::hash::{HashOutput, Sha2x256};
+            let mut output = <Sha2x256 as HashOutput>::Type::default(); // 256-bit buffer
+            ink_env::hash_bytes::<Sha2x256>(&input, &mut output);
+            output
         }
     }
 
