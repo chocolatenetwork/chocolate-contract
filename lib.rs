@@ -1,17 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use ink_lang as ink;
-// PackedLayout
 #[ink::contract]
 mod chocolate {
-    use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
-    use ink_storage::Mapping;
-    // Ref: https://github.com/paritytech/ink/blob/master/examples/mother/Cargo.toml
-    use ink_prelude::vec::Vec;
+   pub use ink::prelude::vec::Vec;
+   pub use ink::storage::traits::Storable;
+   pub use ink::storage::Mapping;
+
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
-    #[derive(Default, SpreadAllocate)]
     #[ink(storage)]
     pub struct Chocolate {
         project_index: u32,
@@ -22,40 +19,39 @@ mod chocolate {
         reviews: Mapping<u32, Review>,
         /// Accountid + projectId
         reviews_projects_list: Vec<(AccountId, u32)>,
+        /// Stores the address of account that have initiated the verification flow.
+        account_verification_flow_initiation: Mapping<AccountId, VerifyDetails>,
+        // Stores the count of verification attempts.
+        verifications_count: u32,
+        // Stores the addresses of accounts authorized to verify the identity.
+        authorizers: Vec<AccountId>,
+        // Stores the addresses of accounts that have been verified.
+        verified_accounts: Vec<AccountId>,
     }
-
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-    )]
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
+    )]
+    pub struct VerifyDetails {
+        index: u32,
+        message: Vec<u8>,
+    }
+
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
     pub struct ReviewProject {
         review_id: u32,
         project_id: u32,
     }
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-        Default,
-    )]
+
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
     pub struct Review {
         id: u32,
@@ -63,21 +59,12 @@ mod chocolate {
         rating: u32,
         owner: AccountId,
     }
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-        Default,
-    )]
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
+
     pub struct Project {
         review_count: u32,
         rating_sum: u32,
@@ -98,31 +85,53 @@ mod chocolate {
         ProjectDoesNotExist,
         /// Queried Review does not exist
         ReviewDoesNotExist,
+        /// Returned if the verification flow is already initiated.
+        VerificationFlowAlreadyInitiated,
+        /// Returned if the verification flow is not initiated.
+        VerificationFlowNotInitiated,
+        /// Return if the flow is not authorized.
+        NotAuthorized,
+        /// Invalid signature
+        InvalidSignature,
+        /// Invalid message
+        VerificationFailed,
     }
 
     /// Type alias for the contract's result type.
     pub type Result<T> = core::result::Result<T, Error>;
     impl Chocolate {
-        /// Constructor that initializes the contract;
+        // Constructure that initialises the contract
         #[ink(constructor)]
-        pub fn new() -> Self {
-            ink_lang::utils::initialize_contract(|_| {})
+        pub fn new(init_value: u32) -> Self {
+            Self {
+                project_index: init_value,
+                projects: Default::default(),
+                reviews: Default::default(),
+                reviews_projects_list: Default::default(),
+                account_verification_flow_initiation: Default::default(),
+                verifications_count: Default::default(),
+                authorizers: Default::default(),
+                verified_accounts: Default::default(),
+            }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
+        /// Constructor that initializes the Contract to default value
         ///
         /// Constructors can delegate to other constructors.
         #[ink(constructor)]
         pub fn default() -> Self {
-            ink_lang::utils::initialize_contract(|_| {})
+            Self::new(Default::default())
         }
 
         /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
         #[ink(message)]
-        pub fn flip(&mut self) -> Result<()> {
-            self.add_project("CHOC".bytes().collect(), Default::default())
+        pub fn add(&mut self) -> Result<()> {
+            self.add_project(
+                "CHOC".bytes().collect(),
+                Default::default(),
+                Default::default(),
+                Default::default(),
+            )
         }
 
         /// Simply returns the current value of our `project`.
@@ -151,14 +160,21 @@ mod chocolate {
             }
         }
         #[ink(message)]
-        pub fn add_project(&mut self, name: Vec<u8>, meta: Vec<u8>) -> Result<()> {
+        pub fn add_project(
+            &mut self,
+            name: Vec<u8>,
+            meta: Vec<u8>,
+            review_count: u32,
+            rating_sum: u32,
+        ) -> Result<()> {
             let caller = self.env().caller();
             let index = self.project_index;
             let project = Project {
                 owner: caller,
                 name,
                 meta,
-                ..Default::default()
+                review_count,
+                rating_sum,
             };
             self.projects.insert(index, &project);
             self.project_index += 1;
@@ -195,6 +211,95 @@ mod chocolate {
                 }
             }
         }
+
+        // TODO: [Please review]
+        // Add authorizer, way to remove a project
+        #[ink(message)]
+        pub fn add_authorizer(&mut self, authorizer: AccountId) -> Result<()> {
+            let index = self.authorizers.len();
+            self.authorizers.insert(index, authorizer);
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn initiate_verfication_flow(&mut self) -> Result<Vec<u8>> {
+            // Cannot re-initiate flow if already begun
+            let verify_details = self
+                .account_verification_flow_initiation
+                .get(&self.env().caller());
+
+            match verify_details {
+                Some(verify_detail) => Ok(verify_detail.message),
+                None => {
+                    // Increment verification flow for uniqueness
+
+                    self.verifications_count = self.verifications_count.saturating_add(1);
+
+                    // Combine account and id for unique signable message
+
+                    let mut verification_message = Vec::new();
+                    self.env().caller().encode(&mut verification_message);
+                    verification_message.extend_from_slice(&self.verifications_count.to_be_bytes());
+                    
+                    let verify_detail: VerifyDetails = 
+                        VerifyDetails { index:  self.verifications_count, message: verification_message };
+                    self.account_verification_flow_initiation.insert(&self.env().caller(), &verify_detail);
+                    
+                    Ok(verify_detail.message)
+                }
+            }
+            // if self
+            //     .account_verification_flow_initiation
+            //     .contains(&self.env().caller())
+            //     {
+            //         return Err(Error::VerificationFlowAlreadyInitiated);
+            //     }
+        }
+
+        #[ink(message)]
+        pub fn verify_identity_response(&mut self, signature: [u8; 65]) -> Result<bool> {
+            // Ensure flow began
+            // Todo: Extract accountId later, the person authorizer can't call as the user
+            if !self
+                .account_verification_flow_initiation
+                .contains(&self.env().caller())
+            {
+                return Err(Error::VerificationFlowNotInitiated);
+            }
+
+            if !self.authorizers.contains(&self.env().caller()) {
+                return Err(Error::NotAuthorized);
+            }
+
+            // Get ECDSA public key out of account
+            let candidate_pub_key = self.env().caller().ecdsa_public_key(); // TODO: [Work in progress] - This is not working yet - 
+
+            // Verify using the caller's signature
+            // https://substrate.dev/rustdocs/v2.0.0/sp_io/crypto/fn.secp256k1_ecdsa_recover.html
+            let message_hash: [u8; 32] = [0; 32]; // TODO: [Please review] - Is this the right way to do this?
+
+            let output: [u8; 33] = [0; 33]; // TODO: [Please review] - Is this the right way to do this?
+
+            let recovered_key = ink::env::ecdsa_recover(
+                &signature,
+                &message_hash,
+                &mut output
+            );
+
+            let index = self.project_index;
+
+            // Check recovered key == candidate_pub_key
+            if recovered_key == candidate_pub_key {
+                // Remove flow initiation
+                self.account_verification_flow_initiation.take(&self.env().caller());
+                // Add to verified accounts
+                self.verified_accounts.insert(index.try_into().unwrap(), self.env().caller());
+                Ok(true)
+            } else {
+                Err(Error::VerificationFailed)
+            }
+
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
@@ -206,14 +311,12 @@ mod chocolate {
         use super::*;
 
         /// Imports `ink_lang` so we can use `#[ink::test]`.
-        use ink_lang as ink;
-
-        fn default_accounts() -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
-            ink_env::test::default_accounts::<Environment>()
+        fn default_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
+            ink::env::test::default_accounts::<Environment>()
         }
 
         fn set_next_caller(caller: AccountId) {
-            ink_env::test::set_caller::<Environment>(caller);
+            ink::env::test::set_caller::<Environment>(caller);
         }
         /// We test if the default constructor does its job.
         #[ink::test]
@@ -227,16 +330,17 @@ mod chocolate {
         fn it_works() {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
-            let mut chocolate = Chocolate::new();
+            let mut chocolate = Chocolate::new(0);
             assert_eq!(chocolate.get_project(0), Err(Error::ProjectDoesNotExist));
-            chocolate.flip().expect("Should add project 0");
+            chocolate.add().expect("Should add project 0");
             assert_eq!(
                 chocolate.get_project(0),
                 Ok(Project {
                     owner: default_accounts.alice,
                     name: "CHOC".to_owned().into_bytes(),
                     meta: Default::default(),
-                    ..Default::default()
+                    review_count: 0,
+                    rating_sum: 0,
                 })
             );
             assert_eq!(chocolate.project_index, 1);
@@ -245,12 +349,12 @@ mod chocolate {
         fn it_works_review() {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
-            let mut chocolate = Chocolate::new();
+            let mut chocolate = Chocolate::new(0);
             assert_eq!(
                 chocolate.get_review(0, default_accounts.alice.clone()),
                 Err(Error::ReviewDoesNotExist)
             );
-            chocolate.flip().expect("Should add test project 0");
+            chocolate.add().expect("Should add test project 0");
             chocolate
                 .add_review(Default::default(), 10, 0)
                 .expect("Adding review should succeed");
