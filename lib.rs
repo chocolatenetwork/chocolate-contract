@@ -3,7 +3,7 @@
 use ink_lang as ink;
 // PackedLayout
 #[ink::contract]
-mod flipper {
+mod chocolate {
     use ink_eth_compatibility::ECDSAPublicKey;
     use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
     use ink_storage::Mapping;
@@ -375,8 +375,8 @@ mod flipper {
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
-            let flipper = Chocolate::default();
-            assert_eq!(flipper.get_project(0), Err(Error::ProjectDoesNotExist));
+            let chocolate = Chocolate::default();
+            assert_eq!(chocolate.get_project(0), Err(Error::ProjectDoesNotExist));
         }
 
         /// We test a simple use case of our contract. Adds a default project 0.
@@ -384,11 +384,11 @@ mod flipper {
         fn it_works() {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
-            let mut flipper = Chocolate::new();
-            assert_eq!(flipper.get_project(0), Err(Error::ProjectDoesNotExist));
-            flipper.flip().expect("Should add project 0");
+            let mut chocolate = Chocolate::new();
+            assert_eq!(chocolate.get_project(0), Err(Error::ProjectDoesNotExist));
+            chocolate.flip().expect("Should add project 0");
             assert_eq!(
-                flipper.get_project(0),
+                chocolate.get_project(0),
                 Ok(Project {
                     owner: default_accounts.alice,
                     name: "CHOC".to_owned().into_bytes(),
@@ -396,29 +396,29 @@ mod flipper {
                     ..Default::default()
                 })
             );
-            assert_eq!(flipper.project_index, 1);
+            assert_eq!(chocolate.project_index, 1);
         }
         #[ink::test]
         fn it_works_review() {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
-            let mut flipper = Chocolate::new();
+            let mut chocolate = Chocolate::new();
             assert_eq!(
-                flipper.get_review(0, default_accounts.alice.clone()),
+                chocolate.get_review(0, default_accounts.alice.clone()),
                 Err(Error::ReviewDoesNotExist)
             );
-            flipper.flip().expect("Should add test project 0");
-            flipper
+            chocolate.flip().expect("Should add test project 0");
+            chocolate
                 .add_review(Default::default(), 10, 0)
                 .expect("Adding review should succeed");
-            let maybe_key = flipper
+            let maybe_key = chocolate
                 .reviews_projects_list
                 .iter()
                 .position(|s| s.0.eq(&default_accounts.alice) && s.1.eq(&0));
 
             assert_eq!(maybe_key, Some(0)); // first key array.
             assert_eq!(
-                flipper.get_review(0, default_accounts.alice),
+                chocolate.get_review(0, default_accounts.alice),
                 Ok(Review {
                     owner: default_accounts.alice,
                     body: Default::default(),
