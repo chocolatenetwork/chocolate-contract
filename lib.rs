@@ -175,6 +175,7 @@ mod chocolate {
             self.add_project("CHOC".bytes().collect(), Default::default())
         }
 
+
         /// Simply returns the current value of our `project`.
         #[ink(message)]
         pub fn get_project(&self, id: u32) -> Result<Project> {
@@ -364,6 +365,7 @@ mod chocolate {
 
         /// Imports `ink_lang` so we can use `#[ink::test]`.
         use ink_lang as ink;
+        use secp256k1::ecdh::SharedSecret;
 
         fn default_accounts() -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
             ink_env::test::default_accounts::<Environment>()
@@ -398,6 +400,7 @@ mod chocolate {
             );
             assert_eq!(chocolate.project_index, 1);
         }
+        /// We test a simple use case of our contract. Adds a default project 0, and reviews it
         #[ink::test]
         fn it_works_review() {
             let default_accounts = default_accounts();
@@ -426,6 +429,21 @@ mod chocolate {
                     id: maybe_key.unwrap().try_into().expect("Should fit"),
                 })
             )
+        }
+        #[ink::test]
+        fn initiate_verfication_flow_works(){
+             
+            let default_accounts = default_accounts();
+            set_next_caller(default_accounts.alice);
+            let mut flipper = Chocolate::new();
+            let message =  flipper.initiate_verfication_flow();
+
+            assert!(message.is_ok());
+
+            assert_eq!(flipper.account_verification_flow_initiation.get(default_accounts.alice), Some(VerifyDetails {
+                index: 1,
+                message: message.unwrap(),
+            }));
         }
     }
 }
