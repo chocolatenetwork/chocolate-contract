@@ -35,6 +35,9 @@ mod chocolate {
         verified_accounts: Vec<AccountId>,
     }
 
+    /// Information stored with a verification_flow_intiation. 
+    /// `index` the verifications_count when this verification_flow_initiation was created.
+    /// `message` A unique combination of AccountId + index. set when the verification_flow_initiation entry is created.
     #[derive(
         Debug,
         PartialEq,
@@ -54,24 +57,11 @@ mod chocolate {
         message: Vec<u8>,
     }
 
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-    )]
-    #[cfg_attr(
-        feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
-    )]
-    pub struct ReviewProject {
-        review_id: u32,
-        project_id: u32,
-    }
+    /// A review left by a user. 
+    /// 
+    /// * `id`: Its key in `reviews` 
+    /// * `rating`: An integer from 1-5, with 5 being best and 1 being worst.
+    /// * `owner`: The AccountId of the `User` who left the review.
     #[derive(
         Debug,
         PartialEq,
@@ -89,10 +79,16 @@ mod chocolate {
     )]
     pub struct Review {
         id: u32,
-        body: Vec<u8>,
         rating: u32,
         owner: AccountId,
     }
+
+    /// A project, associated with a single user
+    /// 
+    /// * `review_count`: The number of reviews that have been left on this project. 
+    /// * `rating_sum`: The sum of the rating of the reviews on the project.
+    /// * `meta`: Generic IPFS metadata associated with a project. 
+    /// Some Expected properties that this should have (in addition with what the `Project` struct already has) are shown [here](https://github.com/chocolatenetwork/choc-js/blob/main/packages/schema/schemas/project/project-schema.json)
     #[derive(
         Debug,
         PartialEq,
@@ -113,7 +109,6 @@ mod chocolate {
         rating_sum: u32,
         owner: AccountId,
         meta: Vec<u8>,
-        name: Vec<u8>,
     }
     // Todo: Separate account types, into Account struct from spec. Add create_user and create_project at verify
     /// Account Types
@@ -172,7 +167,7 @@ mod chocolate {
         /// to `false` and vice versa.
         #[ink(message)]
         pub fn flip(&mut self) -> Result<()> {
-            self.add_project("CHOC".bytes().collect(), Default::default())
+            self.add_project(Default::default())
         }
 
 
@@ -202,12 +197,11 @@ mod chocolate {
             }
         }
         #[ink(message)]
-        pub fn add_project(&mut self, name: Vec<u8>, meta: Vec<u8>) -> Result<()> {
+        pub fn add_project(&mut self,  meta: Vec<u8>) -> Result<()> {
             let caller = self.env().caller();
             let index = self.project_index;
             let project = Project {
                 owner: caller,
-                name,
                 meta,
                 ..Default::default()
             };
@@ -216,7 +210,7 @@ mod chocolate {
             Ok(())
         }
         #[ink(message)]
-        pub fn add_review(&mut self, body: Vec<u8>, rating: u32, project_id: u32) -> Result<()> {
+        pub fn add_review(&mut self,  rating: u32, project_id: u32) -> Result<()> {
             let caller = self.env().caller();
 
             let maybe_project = self.projects.get(project_id);
@@ -232,7 +226,6 @@ mod chocolate {
                             project.review_count += 1;
                             let review = Review {
                                 owner: caller,
-                                body,
                                 rating,
                                 id: as_key_t,
                             };
@@ -392,7 +385,6 @@ mod chocolate {
                 chocolate.get_project(0),
                 Ok(Project {
                     owner: default_accounts.alice,
-                    name: "CHOC".to_owned().into_bytes(),
                     meta: Default::default(),
                     ..Default::default()
                 })
@@ -411,7 +403,7 @@ mod chocolate {
             );
             chocolate.flip().expect("Should add test project 0");
             chocolate
-                .add_review(Default::default(), 10, 0)
+                .add_review(10, 0)
                 .expect("Adding review should succeed");
             let maybe_key = chocolate
                 .reviews_projects_list
@@ -423,7 +415,6 @@ mod chocolate {
                 chocolate.get_review(0, default_accounts.alice),
                 Ok(Review {
                     owner: default_accounts.alice,
-                    body: Default::default(),
                     rating: 10,
                     id: maybe_key.unwrap().try_into().expect("Should fit"),
                 })
