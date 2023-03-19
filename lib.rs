@@ -139,9 +139,9 @@ mod chocolate {
         VerificationFlowNotInitiated,
         /// Return if the flow is not authorized.
         NotAuthorized,
-        /// Invalid signature
+        /// Cannot recover address using ecdsa_verify
         InvalidSignature,
-        /// Invalid message
+        /// The account recovered does not match the address given
         VerificationFailed,
     }
 
@@ -273,9 +273,8 @@ mod chocolate {
             }
         }
 
-
         /// Takes the signature and the user who generated this signature and checks:
-        /// 
+        ///
         /// * If the user exists
         /// * If the signature is valid (matches message and is a valid public key for the AccountId given.)
         #[ink(message)]
@@ -283,7 +282,7 @@ mod chocolate {
             &mut self,
             signature: [u8; 65],
             address_to_verify: AccountId,
-        ) -> Result<bool> {
+        ) -> Result<()> {
             // Ensure is authorized
             if !self.authorizers.contains(&self.env().caller()) {
                 return Err(Error::NotAuthorized);
@@ -304,6 +303,8 @@ mod chocolate {
             // https://substrate.dev/rustdocs/v2.0.0/sp_io/crypto/fn.secp256k1_ecdsa_recover.html
 
             // Hash the message to pass to ecdsa_recover
+            // https://cryptobook.nakov.com/digital-signatures/ecdsa-sign-verify-messages
+
             let message_hash: [u8; 32] = Self::hash_vec(details.message);
 
             let mut recovered: [u8; 33] = [0; 33];
@@ -323,20 +324,23 @@ mod chocolate {
                             .remove(&self.env().caller());
                         // Add to verified accounts
                         self.verified_accounts.push(address_to_verify);
-                        Ok(true)
+                        Ok(())
                     } else {
-                        Ok(false)
+                        Err(Error::VerificationFailed)
                     }
                 }
-                Err(_) => Err(Error::VerificationFailed),
+                Err(_) => Err(Error::InvalidSignature),
             }
         }
 
-        /// Hash some Vec<> of variable length using the Sha2x256 algorithm, giving
+        /// Hash input which represents a message with ecdsa default hash.
+        ///
+        /// The hash function that polkadotjs uses is Blake2x256, hence why Blake2x256 is used here.
+        /// Ref: https://github.com/polkadot-js/common/blob/4f5029118eb003041ff6c39c8336893a18590aee/packages/keyring/src/pair/index.ts#L38
         pub fn hash_vec(input: Vec<u8>) -> [u8; 32] {
-            use ink_env::hash::{HashOutput, Sha2x256};
-            let mut output = <Sha2x256 as HashOutput>::Type::default(); // 256-bit buffer
-            ink_env::hash_bytes::<Sha2x256>(&input, &mut output);
+            use ink_env::hash::{Blake2x256, HashOutput};
+            let mut output = <Blake2x256 as HashOutput>::Type::default(); // 256-bit buffer
+            ink_env::hash_bytes::<Blake2x256>(&input, &mut output);
             output
         }
     }
@@ -439,6 +443,44 @@ mod chocolate {
             );
         }
 
-        // Todo: verify_signature works.
+        #[ink::test]
+        fn verify_signature_works() {
+            // Given
+            let account: [u8; 32] = [
+                143, 155, 234, 70, 218, 2, 174, 129, 205, 227, 158, 209, 53, 212, 224, 116, 8, 169,
+                252, 94, 138, 7, 33, 174, 18, 183, 153, 90, 50, 61, 179, 31,
+            ];
+            let index = 1u32;
+            let msg: Vec<u8> = [
+                60, 66, 121, 116, 101, 115, 62, 0, 144, 143, 155, 234, 70, 218, 2, 174, 129, 205,
+                227, 158, 209, 53, 212, 224, 116, 8, 169, 252, 94, 138, 7, 33, 174, 18, 183, 153,
+                90, 50, 61, 179, 31, 0, 0, 0, 1, 60, 47, 66, 121, 116, 101, 115, 62,
+            ]
+            .into();
+            let sig: [u8; 65] = [
+                4, 57, 253, 82, 44, 200, 18, 93, 199, 231, 124, 16, 136, 222, 120, 218, 156, 153,
+                76, 94, 148, 29, 23, 233, 67, 170, 114, 59, 148, 152, 35, 246, 13, 169, 190, 60,
+                107, 30, 59, 237, 106, 45, 29, 180, 180, 250, 139, 178, 251, 16, 216, 194, 69, 38,
+                98, 154, 84, 12, 207, 70, 138, 248, 209, 241, 1,
+            ];
+
+            // And
+            let default_accounts = default_accounts();
+            let caller = default_accounts.alice;
+            set_next_caller(caller.clone());
+            let mut flipper = Chocolate::new();
+            let details = VerifyDetails {
+                index,
+                message: msg.into(),
+            };
+            let account_as_account_id = AccountId::from(account);
+            flipper
+                .account_verification_flow_initiation
+                .insert(account_as_account_id, &details);
+            flipper.authorizers.push(caller.clone());
+            // Then
+            assert_eq!(flipper.verify_identity_response(sig, account_as_account_id.into()), Ok(()));
+        }
+
     }
 }
