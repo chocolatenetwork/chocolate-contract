@@ -35,7 +35,7 @@ mod chocolate {
         verified_accounts: Vec<AccountId>,
     }
 
-    /// Information stored with a verification_flow_intiation. 
+    /// Information stored with a verification_flow_intiation.
     /// `index` the verifications_count when this verification_flow_initiation was created.
     /// `message` A unique combination of AccountId + index. set when the verification_flow_initiation entry is created.
     #[derive(
@@ -57,9 +57,9 @@ mod chocolate {
         message: Vec<u8>,
     }
 
-    /// A review left by a user. 
-    /// 
-    /// * `id`: Its key in `reviews` 
+    /// A review left by a user.
+    ///
+    /// * `id`: Its key in `reviews`
     /// * `rating`: An integer from 1-5, with 5 being best and 1 being worst.
     /// * `owner`: The AccountId of the `User` who left the review.
     #[derive(
@@ -84,10 +84,10 @@ mod chocolate {
     }
 
     /// A project, associated with a single user
-    /// 
-    /// * `review_count`: The number of reviews that have been left on this project. 
+    ///
+    /// * `review_count`: The number of reviews that have been left on this project.
     /// * `rating_sum`: The sum of the rating of the reviews on the project.
-    /// * `meta`: Generic IPFS metadata associated with a project. 
+    /// * `meta`: Generic IPFS metadata associated with a project.
     /// Some Expected properties that this should have (in addition with what the `Project` struct already has) are shown [here](https://github.com/chocolatenetwork/choc-js/blob/main/packages/schema/schemas/project/project-schema.json)
     #[derive(
         Debug,
@@ -110,8 +110,8 @@ mod chocolate {
         owner: AccountId,
         meta: Vec<u8>,
     }
-    // Todo: Separate account types, into Account struct from spec. Add create_user and create_project at verify
-    /// Account Types
+    // Todo: Separate account types, into Account struct from spec. do create_user or create_project at verify
+    /// Account Types. An enum used to identify a user as owning a project or a regular user.
     #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode)]
     #[cfg_attr(feature = "std", derive(::scale_info::TypeInfo))]
     pub enum AccountType {
@@ -154,24 +154,7 @@ mod chocolate {
             ink_lang::utils::initialize_contract(|_| {})
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            ink_lang::utils::initialize_contract(|_| {})
-        }
-
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
-        #[ink(message)]
-        pub fn flip(&mut self) -> Result<()> {
-            self.add_project(Default::default())
-        }
-
-
-        /// Simply returns the current value of our `project`.
+        /// Return a project given it's id
         #[ink(message)]
         pub fn get_project(&self, id: u32) -> Result<Project> {
             let maybe_project = self.projects.get(id);
@@ -180,6 +163,7 @@ mod chocolate {
                 Some(project) => Ok(project),
             }
         }
+        /// Return a review given the id of the project and the AccountId of the user who submitted it.
         #[ink(message)]
         pub fn get_review(&self, project_id: u32, user: AccountId) -> Result<Review> {
             let maybe_index = self
@@ -196,21 +180,27 @@ mod chocolate {
                 }
             }
         }
+
+        /// Add a project to the contract's storage with some metadata (See (#Project)[`Project`])
+        /// Initialise the project's fields to default values.
         #[ink(message)]
-        pub fn add_project(&mut self,  meta: Vec<u8>) -> Result<()> {
+        pub fn add_project(&mut self, meta: Vec<u8>) -> Result<()> {
             let caller = self.env().caller();
             let index = self.project_index;
             let project = Project {
                 owner: caller,
                 meta,
-                ..Default::default()
+                rating_sum: 0,
+                review_count: 0,
             };
             self.projects.insert(index, &project);
             self.project_index += 1;
             Ok(())
         }
+
+        /// Add a review to a project given it's rating and the projectId.
         #[ink(message)]
-        pub fn add_review(&mut self,  rating: u32, project_id: u32) -> Result<()> {
+        pub fn add_review(&mut self, rating: u32, project_id: u32) -> Result<()> {
             let caller = self.env().caller();
 
             let maybe_project = self.projects.get(project_id);
@@ -239,21 +229,19 @@ mod chocolate {
                 }
             }
         }
-        // Add someone to the list of authorizers
+        /// Add someone to the list of authorizers
         #[ink(message)]
         pub fn add_authorizer(&mut self, authorizer: AccountId) -> Result<()> {
-
-            match self.authorizers.binary_search(&authorizer){
-                Ok(_)=>{
-                    Ok(())
-                }
-                Err(index) =>{
+            match self.authorizers.binary_search(&authorizer) {
+                Ok(_) => Ok(()),
+                Err(index) => {
                     self.authorizers.insert(index, authorizer);
                     Ok(())
                 }
             }
         }
 
+        /// Generate a unique message composed of: `AccountId`(caller) + `index`, or return the existing message if it does not exist and create.
         #[ink(message)]
         pub fn initiate_verfication_flow(&mut self) -> Result<Vec<u8>> {
             // Cannot re-initiate flow if already begun
@@ -285,6 +273,11 @@ mod chocolate {
             }
         }
 
+
+        /// Takes the signature and the user who generated this signature and checks:
+        /// 
+        /// * If the user exists
+        /// * If the signature is valid (matches message and is a valid public key for the AccountId given.)
         #[ink(message)]
         pub fn verify_identity_response(
             &mut self,
@@ -312,10 +305,10 @@ mod chocolate {
 
             // Hash the message to pass to ecdsa_recover
             let message_hash: [u8; 32] = Self::hash_vec(details.message);
-            
-            let mut recovered: [u8; 33] = [0; 33]; 
-            let recovered_result = ink_env::ecdsa_recover(&signature, &message_hash.into(), &mut recovered);
 
+            let mut recovered: [u8; 33] = [0; 33];
+            let recovered_result =
+                ink_env::ecdsa_recover(&signature, &message_hash.into(), &mut recovered);
 
             let ecdsa_output: ECDSAPublicKey = recovered.into();
             let output_as_account_id = ecdsa_output.to_default_account_id();
@@ -329,8 +322,7 @@ mod chocolate {
                         self.account_verification_flow_initiation
                             .remove(&self.env().caller());
                         // Add to verified accounts
-                        self.verified_accounts
-                            .push(address_to_verify);
+                        self.verified_accounts.push(address_to_verify);
                         Ok(true)
                     } else {
                         Ok(false)
@@ -340,6 +332,7 @@ mod chocolate {
             }
         }
 
+        /// Hash some Vec<> of variable length using the Sha2x256 algorithm, giving
         pub fn hash_vec(input: Vec<u8>) -> [u8; 32] {
             use ink_env::hash::{HashOutput, Sha2x256};
             let mut output = <Sha2x256 as HashOutput>::Type::default(); // 256-bit buffer
@@ -366,10 +359,10 @@ mod chocolate {
         fn set_next_caller(caller: AccountId) {
             ink_env::test::set_caller::<Environment>(caller);
         }
-        /// We test if the default constructor does its job.
+        /// We test if the new constructor does its job.
         #[ink::test]
-        fn default_works() {
-            let chocolate = Chocolate::default();
+        fn new_works() {
+            let chocolate = Chocolate::new();
             assert_eq!(chocolate.get_project(0), Err(Error::ProjectDoesNotExist));
         }
 
@@ -380,7 +373,9 @@ mod chocolate {
             set_next_caller(default_accounts.alice);
             let mut chocolate = Chocolate::new();
             assert_eq!(chocolate.get_project(0), Err(Error::ProjectDoesNotExist));
-            chocolate.flip().expect("Should add project 0");
+            chocolate
+                .add_project(Default::default())
+                .expect("Should add project 0");
             assert_eq!(
                 chocolate.get_project(0),
                 Ok(Project {
@@ -401,7 +396,9 @@ mod chocolate {
                 chocolate.get_review(0, default_accounts.alice.clone()),
                 Err(Error::ReviewDoesNotExist)
             );
-            chocolate.flip().expect("Should add test project 0");
+            chocolate
+                .add_project(Default::default())
+                .expect("Should add test project 0");
             chocolate
                 .add_review(10, 0)
                 .expect("Adding review should succeed");
@@ -420,20 +417,28 @@ mod chocolate {
                 })
             )
         }
+
+        /// Test starting the verification flow some account and verify that the message is as expected
         #[ink::test]
-        fn initiate_verfication_flow_works(){
-             
+        fn initiate_verfication_flow_works() {
             let default_accounts = default_accounts();
             set_next_caller(default_accounts.alice);
             let mut flipper = Chocolate::new();
-            let message =  flipper.initiate_verfication_flow();
+            let message = flipper.initiate_verfication_flow();
 
             assert!(message.is_ok());
 
-            assert_eq!(flipper.account_verification_flow_initiation.get(default_accounts.alice), Some(VerifyDetails {
-                index: 1,
-                message: message.unwrap(),
-            }));
+            assert_eq!(
+                flipper
+                    .account_verification_flow_initiation
+                    .get(default_accounts.alice),
+                Some(VerifyDetails {
+                    index: 1,
+                    message: message.unwrap(),
+                })
+            );
         }
+
+        // Todo: verify_signature works.
     }
 }
