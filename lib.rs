@@ -305,7 +305,8 @@ mod chocolate {
             // Hash the message to pass to ecdsa_recover
             // https://cryptobook.nakov.com/digital-signatures/ecdsa-sign-verify-messages
 
-            let message_hash: [u8; 32] = Self::hash_vec(details.message);
+            let wrapped_message = Self::wrap_message(details.message);
+            let message_hash: [u8; 32] = Self::hash_vec(wrapped_message);
 
             let mut recovered: [u8; 33] = [0; 33];
             let recovered_result =
@@ -342,6 +343,15 @@ mod chocolate {
             let mut output = <Blake2x256 as HashOutput>::Type::default(); // 256-bit buffer
             ink_env::hash_bytes::<Blake2x256>(&input, &mut output);
             output
+        }
+        /// Wrap a message with <Bytes>..</Bytes> for hashing to verify a signature.
+        pub fn wrap_message(input: Vec<u8>) -> Vec<u8> {
+            let mut prefix: Vec<u8> = "<Bytes>".into();
+            let suffix: Vec<u8> = "</Bytes>".into();
+            // Check if we can avoid iterating over input here. And instead get <Bytes>..</Bytes> wrap by concatenation.
+            prefix.extend(&input);
+            prefix.extend(suffix);
+            prefix
         }
     }
 
@@ -451,12 +461,10 @@ mod chocolate {
                 252, 94, 138, 7, 33, 174, 18, 183, 153, 90, 50, 61, 179, 31,
             ];
             let index = 1u32;
-            let msg: Vec<u8> = [
-                60, 66, 121, 116, 101, 115, 62, 0, 144, 143, 155, 234, 70, 218, 2, 174, 129, 205,
-                227, 158, 209, 53, 212, 224, 116, 8, 169, 252, 94, 138, 7, 33, 174, 18, 183, 153,
-                90, 50, 61, 179, 31, 0, 0, 0, 1, 60, 47, 66, 121, 116, 101, 115, 62,
-            ]
-            .into();
+            let msg: [u8; 38] = [
+                0, 144, 143, 155, 234, 70, 218, 2, 174, 129, 205, 227, 158, 209, 53, 212, 224, 116,
+                8, 169, 252, 94, 138, 7, 33, 174, 18, 183, 153, 90, 50, 61, 179, 31, 0, 0, 0, 1,
+            ];
             let sig: [u8; 65] = [
                 4, 57, 253, 82, 44, 200, 18, 93, 199, 231, 124, 16, 136, 222, 120, 218, 156, 153,
                 76, 94, 148, 29, 23, 233, 67, 170, 114, 59, 148, 152, 35, 246, 13, 169, 190, 60,
@@ -479,8 +487,10 @@ mod chocolate {
                 .insert(account_as_account_id, &details);
             flipper.authorizers.push(caller.clone());
             // Then
-            assert_eq!(flipper.verify_identity_response(sig, account_as_account_id.into()), Ok(()));
+            assert_eq!(
+                flipper.verify_identity_response(sig, account_as_account_id.into()),
+                Ok(())
+            );
         }
-
     }
 }
