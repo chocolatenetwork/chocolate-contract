@@ -20,18 +20,18 @@ mod chocolate {
         project_index: u32,
         /// Stores a project from id in storage
         projects: Mapping<u32, Project>,
-        // Multivalued keys would allow wider scope for reviews
-        /// Index in reviews_projects_list arr. -> struct
+        /// Index in reviews_projects_list array -> struct
         reviews: Mapping<u32, Review>,
-        /// Accountid + projectId
+        /// A list of review "keys", each review is identified by a unique Accountid + projectId pair.
+        /// Where AccountId is the AccountId of the user who left the review, and the u32 is the projectedId of the project being reviewed.
         reviews_projects_list: Vec<(AccountId, u32)>,
         /// Stores the address of account that have initiated the verification flow.
         account_verification_flow_initiation: Mapping<AccountId, VerifyDetails>,
-        // Stores the count of verification attempts.
+        /// Stores the count of verification attempts. Used to generate message for the next account_verification_flow_initiation entry.
         verifications_count: u32,
-        // Stores the addresses of accounts authorized to verify the identity.
+        /// Stores the addresses of accounts authorized to verify the identity.
         authorizers: Vec<AccountId>,
-        // Stores the addresses of accounts that have been verified.
+        /// Stores the addresses of accounts that have been verified.
         verified_accounts: Vec<AccountId>,
     }
 
@@ -365,7 +365,6 @@ mod chocolate {
 
         /// Imports `ink_lang` so we can use `#[ink::test]`.
         use ink_lang as ink;
-        use secp256k1::ecdh::SharedSecret;
 
         fn default_accounts() -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
             ink_env::test::default_accounts::<Environment>()
