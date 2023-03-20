@@ -1,20 +1,19 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use ink_lang as ink;
 // PackedLayout
 #[ink::contract]
 mod chocolate {
-    use ink_eth_compatibility::ECDSAPublicKey;
-    use ink_storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
-    use ink_storage::Mapping;
+    // use ink_eth_compatibility::ECDSAPublicKey;
+    // use ink::storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
+    use ink::storage::Mapping;
     use scale::Encode;
     // scale::Encode::encode(&self.env().caller(), &mutverification_message)
     // Ref: https://github.com/paritytech/ink/blob/master/examples/mother/Cargo.toml
-    use ink_prelude::vec::Vec;
+    use ink::prelude::vec::Vec;
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
-    #[derive(Default, SpreadAllocate)]
+    // #[derive(Default, SpreadAllocate)]
     #[ink(storage)]
     pub struct Chocolate {
         project_index: u32,
@@ -38,19 +37,10 @@ mod chocolate {
     /// Information stored with a verification_flow_intiation.
     /// `index` the verifications_count when this verification_flow_initiation was created.
     /// `message` A unique combination of AccountId + index. set when the verification_flow_initiation entry is created.
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-    )]
+    #[derive(Debug, PartialEq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
     pub struct VerifyDetails {
         index: u32,
@@ -62,20 +52,10 @@ mod chocolate {
     /// * `id`: Its key in `reviews`
     /// * `rating`: An integer from 1-5, with 5 being best and 1 being worst.
     /// * `owner`: The AccountId of the `User` who left the review.
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-        Default,
-    )]
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
     pub struct Review {
         id: u32,
@@ -89,20 +69,10 @@ mod chocolate {
     /// * `rating_sum`: The sum of the rating of the reviews on the project.
     /// * `meta`: Generic IPFS metadata associated with a project.
     /// Some Expected properties that this should have (in addition with what the `Project` struct already has) are shown [here](https://github.com/chocolatenetwork/choc-js/blob/main/packages/schema/schemas/project/project-schema.json)
-    #[derive(
-        Debug,
-        PartialEq,
-        scale::Encode,
-        scale::Decode,
-        Clone,
-        SpreadLayout,
-        PackedLayout,
-        SpreadAllocate,
-        Default,
-    )]
+    #[derive(Debug, PartialEq, Eq, scale::Encode, scale::Decode, Clone)]
     #[cfg_attr(
         feature = "std",
-        derive(scale_info::TypeInfo, ink_storage::traits::StorageLayout,)
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
     pub struct Project {
         review_count: u32,
@@ -151,7 +121,7 @@ mod chocolate {
         /// Constructor that initializes the contract;
         #[ink(constructor)]
         pub fn new() -> Self {
-            ink_lang::utils::initialize_contract(|_| {})
+            Self { project_index: 0, projects: Default::default(), reviews: Default::default(), reviews_projects_list: Default::default(), account_verification_flow_initiation: Default::default(), verifications_count: Default::default(), authorizers: Default::default(), verified_accounts: Default::default() }
         }
 
         /// Return a project given it's id
@@ -310,16 +280,16 @@ mod chocolate {
 
             let mut recovered: [u8; 33] = [0; 33];
             let recovered_result =
-                ink_env::ecdsa_recover(&signature, &message_hash.into(), &mut recovered);
+                ink::env::ecdsa_recover(&signature, &message_hash.into(), &mut recovered);
 
-            let ecdsa_output: ECDSAPublicKey = recovered.into();
-            let output_as_account_id = ecdsa_output.to_default_account_id();
+            // let ecdsa_output: ECDSAPublicKey = recovered.into();
+            let output_as_account_id = Self::hash_vec(recovered.into());
 
             // ink
             // Check recovered key == candidate_pub_key
             match recovered_result {
                 Ok(_) => {
-                    if address_to_verify == output_as_account_id {
+                    if address_to_verify == output_as_account_id.into() {
                         // Remove flow initiation
                         self.account_verification_flow_initiation
                             .remove(&self.env().caller());
@@ -339,9 +309,9 @@ mod chocolate {
         /// The hash function that polkadotjs uses is Blake2x256, hence why Blake2x256 is used here.
         /// Ref: https://github.com/polkadot-js/common/blob/4f5029118eb003041ff6c39c8336893a18590aee/packages/keyring/src/pair/index.ts#L38
         pub fn hash_vec(input: Vec<u8>) -> [u8; 32] {
-            use ink_env::hash::{Blake2x256, HashOutput};
+            use ink::env::hash::{Blake2x256, HashOutput};
             let mut output = <Blake2x256 as HashOutput>::Type::default(); // 256-bit buffer
-            ink_env::hash_bytes::<Blake2x256>(&input, &mut output);
+            ink::env::hash_bytes::<Blake2x256>(&input, &mut output);
             output
         }
         /// Wrap a message with <Bytes>..</Bytes> for hashing to verify a signature.
@@ -364,14 +334,13 @@ mod chocolate {
         use super::*;
 
         /// Imports `ink_lang` so we can use `#[ink::test]`.
-        use ink_lang as ink;
 
-        fn default_accounts() -> ink_env::test::DefaultAccounts<ink_env::DefaultEnvironment> {
-            ink_env::test::default_accounts::<Environment>()
+        fn default_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
+            ink::env::test::default_accounts::<Environment>()
         }
 
         fn set_next_caller(caller: AccountId) {
-            ink_env::test::set_caller::<Environment>(caller);
+            ink::env::test::set_caller::<Environment>(caller);
         }
         /// We test if the new constructor does its job.
         #[ink::test]
@@ -395,7 +364,8 @@ mod chocolate {
                 Ok(Project {
                     owner: default_accounts.alice,
                     meta: Default::default(),
-                    ..Default::default()
+                    rating_sum: Default::default(),
+                    review_count: Default::default(),
                 })
             );
             assert_eq!(chocolate.project_index, 1);
