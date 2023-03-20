@@ -51,7 +51,7 @@ Modern releases of `gcc`, `clang`, as well as Visual Studio 2019+ should work.
 2. Install the latest version of `cargo-contract`:
 
    ```bash
-   cargo install cargo-contract --force --version ^2
+   cargo install --locked cargo-contract --version ^2
    ```
 
 3. Verify the installation and explore the commands available by running the following command:
@@ -213,14 +213,13 @@ We will use the `cargo-contract` CLI tool to `upload` and `instantiate` the **_c
 4. Upload and instantiate your contract using:
 
    ```bash
-   cargo contract instantiate --constructor new --args "false" --suri //Alice --salt $(date +%s)
+   cargo contract instantiate --constructor new --suri //Alice --salt $(date +%s)
    ```
 
    Some notes about the command:
 
    - The `instantiate` command will do both the `upload` and `instantiate` steps for you.
    - We need to specify the contract constructor to use, which in this case is `new()`
-   - We need to specify the argument to the constructor, which in this case is `false`
    - We need to specify the account uploading and instantiating the contract, which in this case is the default development account of `//Alice`
    - During development we may want to upload the instantiate the same contract multiple times, so we specify a `salt` using the current time. Note that this is optional.
 
