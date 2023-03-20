@@ -3,18 +3,14 @@
 // PackedLayout
 #[ink::contract]
 mod chocolate {
-    // use ink_eth_compatibility::ECDSAPublicKey;
-    // use ink::storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
     use ink::env::hash::{Blake2x256, CryptoHash, HashOutput};
     use ink::storage::Mapping;
     use scale::Encode;
-    // scale::Encode::encode(&self.env().caller(), &mutverification_message)
-    // Ref: https://github.com/paritytech/ink/blob/master/examples/mother/Cargo.toml
     use ink::prelude::vec::Vec;
+
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
-    // #[derive(Default, SpreadAllocate)]
     #[ink(storage)]
     pub struct Chocolate {
         project_index: u32,
