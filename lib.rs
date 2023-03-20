@@ -5,6 +5,7 @@
 mod chocolate {
     // use ink_eth_compatibility::ECDSAPublicKey;
     // use ink::storage::traits::{PackedLayout, SpreadAllocate, SpreadLayout};
+    use ink::env::hash::{Blake2x256, CryptoHash, HashOutput};
     use ink::storage::Mapping;
     use scale::Encode;
     // scale::Encode::encode(&self.env().caller(), &mutverification_message)
@@ -121,7 +122,16 @@ mod chocolate {
         /// Constructor that initializes the contract;
         #[ink(constructor)]
         pub fn new() -> Self {
-            Self { project_index: 0, projects: Default::default(), reviews: Default::default(), reviews_projects_list: Default::default(), account_verification_flow_initiation: Default::default(), verifications_count: Default::default(), authorizers: Default::default(), verified_accounts: Default::default() }
+            Self {
+                project_index: 0,
+                projects: Default::default(),
+                reviews: Default::default(),
+                reviews_projects_list: Default::default(),
+                account_verification_flow_initiation: Default::default(),
+                verifications_count: Default::default(),
+                authorizers: Default::default(),
+                verified_accounts: Default::default(),
+            }
         }
 
         /// Return a project given it's id
@@ -276,15 +286,17 @@ mod chocolate {
             // https://cryptobook.nakov.com/digital-signatures/ecdsa-sign-verify-messages
 
             let wrapped_message = Self::wrap_message(details.message);
-            let message_hash: [u8; 32] = Self::hash_vec(wrapped_message);
+            // The hash function that polkadotjs uses is Blake2x256, hence why Blake2x256 is used here.
+            // Ref: https://github.com/polkadot-js/common/blob/4f5029118eb003041ff6c39c8336893a18590aee/packages/keyring/src/pair/index.ts#L38
+            let message_hash: [u8; 32] = Self::hash_vec::<Blake2x256>(wrapped_message);
 
             let mut recovered: [u8; 33] = [0; 33];
             let recovered_result =
                 ink::env::ecdsa_recover(&signature, &message_hash.into(), &mut recovered);
 
-            // let ecdsa_output: ECDSAPublicKey = recovered.into();
-            let output_as_account_id = Self::hash_vec(recovered.into());
-
+            // AccountId is recovered hashed with blake2x256: https://substrate.stackexchange.com/a/7448/88
+            // Is encoding needed here?
+            let output_as_account_id = Self::hash_vec::<Blake2x256>(recovered.into());
             // ink
             // Check recovered key == candidate_pub_key
             match recovered_result {
@@ -306,12 +318,12 @@ mod chocolate {
 
         /// Hash input which represents a message with ecdsa default hash.
         ///
-        /// The hash function that polkadotjs uses is Blake2x256, hence why Blake2x256 is used here.
-        /// Ref: https://github.com/polkadot-js/common/blob/4f5029118eb003041ff6c39c8336893a18590aee/packages/keyring/src/pair/index.ts#L38
-        pub fn hash_vec(input: Vec<u8>) -> [u8; 32] {
-            use ink::env::hash::{Blake2x256, HashOutput};
-            let mut output = <Blake2x256 as HashOutput>::Type::default(); // 256-bit buffer
-            ink::env::hash_bytes::<Blake2x256>(&input, &mut output);
+        pub fn hash_vec<H>(input: Vec<u8>) -> <H as HashOutput>::Type
+        where
+            H: CryptoHash,
+        {
+            let mut output = <H as HashOutput>::Type::default(); // 256-bit buffer
+            ink::env::hash_bytes::<H>(&input, &mut output);
             output
         }
         /// Wrap a message with <Bytes>..</Bytes> for hashing to verify a signature.
