@@ -75,6 +75,7 @@ mod chocolate {
         feature = "std",
         derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout,)
     )]
+
     pub struct Project {
         review_count: u32,
         rating_sum: u32,
@@ -346,7 +347,6 @@ mod chocolate {
         use super::*;
 
         /// Imports `ink_lang` so we can use `#[ink::test]`.
-
         fn default_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
             ink::env::test::default_accounts::<Environment>()
         }
