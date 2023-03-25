@@ -92,12 +92,14 @@ cargo test
 The command should compile the contract and run the tests. If the tests pass, you will see the output similar to the following to indicate successful test completion:
 
 ```bash
-running 3 tests
-test chocolate::tests::default_works ... ok
+running 5 tests
+test chocolate::tests::new_works ... ok
+test chocolate::tests::initiate_verfication_flow_works ... ok
 test chocolate::tests::it_works ... ok
 test chocolate::tests::it_works_review ... ok
+test chocolate::tests::verify_signature_works ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
 
 ## Build the Contract
