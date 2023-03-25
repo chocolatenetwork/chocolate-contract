@@ -4,9 +4,9 @@
 #[ink::contract]
 mod chocolate {
     use ink::env::hash::{Blake2x256, CryptoHash, HashOutput};
+    use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
     use scale::Encode;
-    use ink::prelude::vec::Vec;
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
@@ -163,11 +163,13 @@ mod chocolate {
         pub fn get_projects_list(&self) -> Vec<(AccountId, u32, Project)> {
             let mut projects_list: Vec<(AccountId, u32, Project)> = Vec::new();
             for id in 0..self.project_index {
-                let project = self.projects.get(id).expect("Valid keys should have project entries");
+                let project = self
+                    .projects
+                    .get(id)
+                    .expect("Valid keys should have project entries");
                 projects_list.push((project.owner, id, project));
             }
             projects_list
-
         }
 
         /// Return all reviews associated with a project given the project id.
@@ -175,16 +177,11 @@ mod chocolate {
         pub fn get_reviews_list(&self, project_id: u32) -> Vec<Review> {
             self.reviews_projects_list
                 .iter()
-                .filter(|s| s.1.eq(&project_id))
-                .map(|s| {
-                    let as_key: u32 = self
-                        .reviews_projects_list
-                        .iter()
-                        .position(|t| t.0.eq(&s.0) && t.1.eq(&s.1))
-                        .expect("Should exist")
-                        .try_into()
-                        .expect("Should fit");
-                    self.reviews.get(as_key).expect("Should exist")
+                .enumerate()
+                .filter(|(_, (_, id))| id.eq(&project_id))
+                .map(|(index, _)| {
+                    let as_key: u32 = index.try_into().expect("Expected valid index");
+                    self.reviews.get(as_key).expect("Expected valid key")
                 })
                 .collect()
         }
