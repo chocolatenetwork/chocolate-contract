@@ -4,9 +4,9 @@
 #[ink::contract]
 mod chocolate {
     use ink::env::hash::{Blake2x256, CryptoHash, HashOutput};
+    use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
     use scale::Encode;
-    use ink::prelude::vec::Vec;
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
@@ -156,6 +156,60 @@ mod chocolate {
                     Ok(review)
                 }
             }
+        }
+
+        /// Return list of projects (AccountId, ProjectId, project details(all fields))
+        #[ink(message)]
+        pub fn get_projects_list(&self) -> Vec<(AccountId, u32, Project)> {
+            let mut projects_list: Vec<(AccountId, u32, Project)> = Vec::new();
+            for id in 0..self.project_index {
+                let project = self
+                    .projects
+                    .get(id)
+                    .expect("Valid keys should have project entries");
+                projects_list.push((project.owner, id, project));
+            }
+            projects_list
+        }
+
+        /// Return all reviews associated with a project given the project id.
+        #[ink(message)]
+        pub fn get_reviews_list(&self, project_id: u32) -> Vec<Review> {
+            self.reviews_projects_list
+                .iter()
+                .enumerate()
+                .filter(|(_, (_, id))| id.eq(&project_id))
+                .map(|(index, _)| {
+                    let as_key: u32 = index.try_into().expect("Expected valid index");
+                    self.reviews.get(as_key).expect("Expected valid key")
+                })
+                .collect()
+        }
+
+        /// Return all users who have reviewed a project given the project id.
+        #[ink(message)]
+        pub fn get_reviewers_list(&self, project_id: u32) -> Vec<AccountId> {
+            self.reviews_projects_list
+                .iter()
+                .filter(|s| s.1.eq(&project_id))
+                .map(|s| s.0)
+                .collect()
+        }
+
+        /// Return all projects reviewed by a user given the user's AccountId.
+        #[ink(message)]
+        pub fn get_projects_reviewed_by_user(&self, user: AccountId) -> Vec<(u32, Project)> {
+            self.reviews_projects_list
+                .iter()
+                .filter(|s| s.0.eq(&user))
+                .map(|s| {
+                    let project = self
+                        .projects
+                        .get(s.1)
+                        .expect("Valid keys should have project entries");
+                    (s.1, project)
+                })
+                .collect()
         }
 
         /// Add a project to the contract's storage with some metadata (See (#Project)[`Project`])
